@@ -35,6 +35,7 @@ Sub CompanyChange()
     Set Contact = Nothing
     Set ContactsFolder = Nothing
 End Sub
+
 Sub BulkImportContacts()
     Dim Name As String
     Dim FoundFolder As Folder
@@ -43,7 +44,7 @@ Sub BulkImportContacts()
     Name = InputBox("Enter folder name:", "Search Folder")
     If Len(Trim$(Name)) = 0 Then Exit Sub
     
-    ' find if folder exists
+    ' find out if folder exists
     Set FoundFolder = FindInFolders(Application.Session.Folders, Name)
     
     If FoundFolder Is Nothing Then
@@ -61,8 +62,9 @@ Sub BulkImportContacts()
     
     MsgBox ("Process was successful!")
 End Sub
+
 Function FindInFolders(TheFolders As Outlook.Folders, Name As String)
-    Dim SubFolder As Outlook.MAPIFolder
+    Dim SubFolder As Outlook.Folder
     
     On Error Resume Next
     
@@ -78,15 +80,80 @@ Function FindInFolders(TheFolders As Outlook.Folders, Name As String)
         End If
     Next
 End Function
+
 Sub ImportToContacts(FoundFolder As Folder)
     Dim MyItem As Outlook.MailItem
-    Dim num As Integer
-    num = 1
+    Dim ContactsFolder As Folder
+    Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
+    Dim sender As String
+    sender = "donotreply_eventspot@constantcontact.com"
+    Dim body As String
+    Dim counter As Integer
+    counter = 1
         
     For Each MyItem In FoundFolder.Items
-        'Debug.Print "Sender: " & MyItem.Sender
-        'Debug.Print "Body: " & MyItem.Body
-        MyItem.SaveAs "C:\Users\Hunter\Documents\out" & num & ".txt", olTXT
-        num = num + 1
+        ' If MyItem.sender Is sender Then
+        Call CreateContact(MyItem.body)
+        
+        ' mark as read if it is unread
+        If MyItem.UnRead Then
+            MyItem.UnRead = False
+        End If
+        
+        ' for debugging
+        MyItem.SaveAs "C:\Users\Hunter\Documents\out" & counter & ".txt", olTXT
+        counter = counter + 1
     Next
+End Sub
+
+Sub CreateContact(body As String)
+    Dim messageArray() As String
+    Dim splitArray() As String
+    Dim delimitedMessage As String
+    Dim Contact As Outlook.ContactItem
+    Set Contact = Application.CreateItem(olContactItem)
+    
+    ' replace specific text with ### in order to split it up into an array
+    delimitedMessage = Replace(body, "First Name:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Last Name:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Email Address:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Phone:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Business Information", "###")
+    delimitedMessage = Replace(delimitedMessage, "Company:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Job Title:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Address", "###")
+    delimitedMessage = Replace(delimitedMessage, "City:", "###")
+    delimitedMessage = Replace(delimitedMessage, "State:", "###")
+    delimitedMessage = Replace(delimitedMessage, "ZIP Code:", "###")
+    delimitedMessage = Replace(delimitedMessage, "Country:", "###")
+    delimitedMessage = Replace(delimitedMessage, "What is your position?", "###")
+    delimitedMessage = Replace(delimitedMessage, "Payment Summary", "###")
+    delimitedMessage = Replace(delimitedMessage, "Total", "###")
+    messageArray = Split(delimitedMessage, "###")
+    
+    Contact.FirstName = messageArray(1)
+    Contact.LastName = messageArray(2)
+    
+    splitArray = Split(messageArray(3), Chr(34))
+    Contact.Email1Address = splitArray(UBound(splitArray))
+    
+    splitArray = Split(messageArray(4), Chr(34))
+    Contact.BusinessTelephoneNumber = splitArray(UBound(splitArray))
+    
+    Contact.CompanyName = messageArray(6)
+    Contact.JobTitle = messageArray(7)
+    
+    splitArray = Split(messageArray(8), Chr(34))
+    Contact.BusinessAddressStreet = splitArray(UBound(splitArray))
+    
+    Contact.BusinessAddressCity = messageArray(9)
+    Contact.BusinessAddressState = messageArray(10)
+    Contact.BusinessAddressPostalCode = messageArray(11)
+    Contact.BusinessAddressCountry = messageArray(12)
+    
+    splitArray = Split(messageArray(13), vbNewLine)
+    Contact.body = "Position: " & splitArray(2) & vbNewLine & _
+        "Total payment: " & messageArray(UBound(messageArray))
+    
+    Contact.Save
 End Sub
