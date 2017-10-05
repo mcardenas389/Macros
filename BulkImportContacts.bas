@@ -36,17 +36,22 @@ Sub CompanyChange()
     Set ContactsFolder = Nothing
 End Sub
 
-Sub BulkImportContacts()
-    Dim Name As String
+' imports contacts from emails from a folder
+' searches for the folder with FindInFolders()
+' calls ImportToContacts() when folder is found
+Private Sub BulkImportContacts()
+    Dim name As String
     Dim FoundFolder As Folder
 
     ' if nothing is entered, exit out of macro
-    Name = InputBox("Enter folder name:", "Search Folder")
-    If Len(Trim$(Name)) = 0 Then Exit Sub
+    name = InputBox("Enter folder name:", "Search Folder")
+    If Len(Trim$(name)) = 0 Then Exit Sub
     
     ' find out if folder exists
-    Set FoundFolder = FindInFolders(Application.Session.Folders, Name)
+    Set FoundFolder = FindInFolders(Application.Session.Folders, name)
     
+    ' if folder is not found or is empty, do nothing
+    ' if the folder is found and has items, call ImportToContacts()
     If FoundFolder Is Nothing Then
         MsgBox "Not Found", vbInformation
         Exit Sub
@@ -61,9 +66,13 @@ Sub BulkImportContacts()
     End If
     
     MsgBox ("Process was successful!")
+    
+    ' clean up
+    Set FoundFolder = Nothing
 End Sub
 
-Function FindInFolders(TheFolders As Outlook.Folders, Name As String)
+' searches for a given folder name in the inbox
+Private Function FindInFolders(TheFolders As Outlook.Folders, name As String)
     Dim SubFolder As Outlook.Folder
     
     On Error Resume Next
@@ -71,17 +80,21 @@ Function FindInFolders(TheFolders As Outlook.Folders, Name As String)
     Set FindInFolders = Nothing
     
     For Each SubFolder In TheFolders
-        If LCase(SubFolder.Name) Like LCase(Name) Then
+        If LCase(SubFolder.name) Like LCase(name) Then
+            ' return value
             Set FindInFolders = SubFolder
             Exit For
         Else
-            Set FindInFolders = FindInFolders(SubFolder.Folders, Name)
+            ' return value
+            Set FindInFolders = FindInFolders(SubFolder.Folders, name)
             If Not FindInFolders Is Nothing Then Exit For
         End If
     Next
 End Function
 
-Sub ImportToContacts(FoundFolder As Folder)
+' searches through a given folder and gets contact information from email body
+' calls CreateOrUpdateContact() to create new contacts
+Private Sub ImportToContacts(FoundFolder As Folder)
     Dim MyItem As Outlook.MailItem
     Dim ContactsFolder As Folder
     Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
@@ -92,28 +105,32 @@ Sub ImportToContacts(FoundFolder As Folder)
     counter = 1
         
     For Each MyItem In FoundFolder.Items
-        ' If MyItem.sender Is sender Then
-        Call CreateContact(MyItem.body)
-        
         ' mark as read if it is unread
         If MyItem.UnRead Then
             MyItem.UnRead = False
         End If
         
+        ' If MyItem.sender Is sender Then
+        Call CreateOrUpdateContact(MyItem.body)
+        
         ' for debugging
         MyItem.SaveAs "C:\Users\Hunter\Documents\out" & counter & ".txt", olTXT
         counter = counter + 1
     Next
+    
+    ' clean up
+    Set ContactsFolder = Nothing
 End Sub
 
-Sub CreateContact(body As String)
+' gets contact information from email body
+Private Sub CreateOrUpdateContact(body As String)
     Dim messageArray() As String
     Dim splitArray() As String
     Dim delimitedMessage As String
     Dim Contact As Outlook.ContactItem
-    Set Contact = Application.CreateItem(olContactItem)
     
     ' replace specific text with ### in order to split it up into an array
+    ' field names may change if email body changes in the future
     delimitedMessage = Replace(body, "First Name:", "###")
     delimitedMessage = Replace(delimitedMessage, "Last Name:", "###")
     delimitedMessage = Replace(delimitedMessage, "Email Address:", "###")
@@ -130,30 +147,86 @@ Sub CreateContact(body As String)
     delimitedMessage = Replace(delimitedMessage, "Payment Summary", "###")
     delimitedMessage = Replace(delimitedMessage, "Total", "###")
     messageArray = Split(delimitedMessage, "###")
-    
-    Contact.FirstName = messageArray(1)
-    Contact.LastName = messageArray(2)
-    
+        
+    ' search for contact after collecting the relevant data
+    ' clean up email address string before passing it to FindContact()
     splitArray = Split(messageArray(3), Chr(34))
-    Contact.Email1Address = splitArray(UBound(splitArray))
+    Set Contact = FindContact(messageArray(1), messageArray(2), splitArray(UBound(splitArray)))
     
-    splitArray = Split(messageArray(4), Chr(34))
-    Contact.BusinessTelephoneNumber = splitArray(UBound(splitArray))
+    ' build prompt
+    ' add phone, job title, company name, address
+    Dim prompt As String
+    prompt = "Contact exists!" & vbNewLine & "Name: " & Replace(messageArray(1), vbNewLine, "") & _
+            " " & Replace(messageArray(2), vbNewLine, "") & vbNewLine & _
+            "Email: " & Replace(splitArray(UBound(splitArray)), vbNewLine, "") & vbNewLine & _
+            vbNewLine & "Update with new information?"
     
-    Contact.CompanyName = messageArray(6)
-    Contact.JobTitle = messageArray(7)
+    ' if the contact is not found, then create a new contact without prompting the user
+    ' if the contact is found, then prompt the user before updating it
+    If Contact Is Nothing Then
+        Set Contact = Application.CreateItem(olContactItem)
+    Else
+        If MsgBox(prompt, vbQuestion Or vbYesNo) = vbNo Then
+            Set Contact = Nothing
+        End If
+    End If
     
-    splitArray = Split(messageArray(8), Chr(34))
-    Contact.BusinessAddressStreet = splitArray(UBound(splitArray))
+    ' create or update contact if contact object has been set
+    If Not Contact Is Nothing Then
+        Contact.firstName = messageArray(1)
+        Contact.lastName = messageArray(2)
+        
+        ' split array at " marks from hyperlink
+        splitArray = Split(messageArray(3), Chr(34))
+        ' remove the newline characters from email address with empty string
+        Contact.Email1Address = Replace(splitArray(UBound(splitArray)), vbNewLine, "")
+        
+        splitArray = Split(messageArray(4), Chr(34))
+        Contact.BusinessTelephoneNumber = splitArray(UBound(splitArray))
+        
+        Contact.CompanyName = Replace(messageArray(6), vbNewLine, "")
+        Contact.JobTitle = Replace(messageArray(7), vbNewLine, "")
+        
+        splitArray = Split(messageArray(8), Chr(34))
+        Contact.BusinessAddressStreet = splitArray(UBound(splitArray))
+            
+        Contact.BusinessAddressCity = messageArray(9)
+        Contact.BusinessAddressState = messageArray(10) ' change to state abbreviations
+        Contact.BusinessAddressPostalCode = messageArray(11)
+        Contact.BusinessAddressCountry = messageArray(12)
+        
+        splitArray = Split(messageArray(13), vbNewLine)
+        ' add to notes, [current year] Regional Conference
+        Contact.body = "Position: " & splitArray(2) & vbNewLine & _
+            "Total payment: " & Replace(messageArray(UBound(messageArray)), vbNewLine, "")
+        
+        ' save contact data
+        Contact.Save
+    End If
     
-    Contact.BusinessAddressCity = messageArray(9)
-    Contact.BusinessAddressState = messageArray(10)
-    Contact.BusinessAddressPostalCode = messageArray(11)
-    Contact.BusinessAddressCountry = messageArray(12)
-    
-    splitArray = Split(messageArray(13), vbNewLine)
-    Contact.body = "Position: " & splitArray(2) & vbNewLine & _
-        "Total payment: " & messageArray(UBound(messageArray))
-    
-    Contact.Save
+    ' clean up
+    Set Contact = Nothing
 End Sub
+
+' searches for a contact
+' returns contact object if it is found and Nothing if it is not found
+Function FindContact(firstName As String, lastName As String, email As String)
+    Dim filter As String
+    filter = "[FullName] = " & Chr(34) & firstName & " " & lastName & Chr(34) & _
+        " And [E-mail] = " & Chr(34) & email & Chr(34)
+    
+    ' clean up string and remove newline characters with empty strings
+    filter = Replace(filter, vbNewLine, "")
+    
+    Dim ContactsFolder As Folder
+    Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
+    Dim Contact As Outlook.ContactItem
+    Set Contact = ContactsFolder.Items.Find(filter)
+    
+    ' return value
+    Set FindContact = Contact
+    
+    ' clean up
+    Set ConctacsFolder = Nothing
+    Set Conact = Nothing
+End Function
