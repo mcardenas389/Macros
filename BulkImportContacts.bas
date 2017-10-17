@@ -81,12 +81,9 @@ Private Sub ImportToContacts(FoundFolder As Folder)
     ' limit how the user inputs number of days
     Dim days As Integer
     days = InputBox("Number of days back: ")
-    filter = "[Received] >= " & Chr(34) & dt - days & Chr(34) ' & " And " & _
-        ' "[E-mail] = " & constantContact & Chr(34) & " Or " & _
-        ' "[E-mail] = " & paypal
-    Set MyItems = FoundFolder.Items.Restrict(filter)
+    filter = "[Received] >= " & Chr(34) & dt - days & Chr(34)
     
-    Debug.Print "Count = "; MyItems.Count
+    Set MyItems = FoundFolder.Items.Restrict(filter)
     
     For Each Mail In MyItems
         ' mark as read if it is unread
@@ -94,14 +91,17 @@ Private Sub ImportToContacts(FoundFolder As Folder)
             Mail.UnRead = False
         End If
         
-        ' If Mail.SenderEmailAddress Is constantContact Then
-            ' Call CreateOrUpdateContact(Mail.body)
+        ' Debug.Print "Body: " & vbNewLine & Mail.body
+        
+        If Mail.SenderEmailAddress Like constantContact Then
+            Call CreateOrUpdateContact(Mail.body)
         ' ElseIf Mail.SenderEmailAddress Is paypal Then
-            Call UpdatePayment(Mail.body)
-        ' End If
+            ' Call UpdatePayment(Mail.body)
+        End If
         
         ' for debugging
-        Mail.SaveAs "C:\Users\Hunter\Documents\out" & counter & ".txt", olTXT
+        ' Mail.SaveAs "C:\Users\Hunter\Documents\out" & counter & ".txt", olTXT
+        ' Mail.SaveAs "C:\Users\Michelle\Documents\out" & counter & ".txt", olTXT
         counter = counter + 1
     Next
     
@@ -173,7 +173,7 @@ Private Sub CreateOrUpdateContact(body As String)
     delimitedMessage = Replace(delimitedMessage, "Business Information", "###")
     delimitedMessage = Replace(delimitedMessage, "Company:", "###")
     delimitedMessage = Replace(delimitedMessage, "Job Title:", "###")
-    delimitedMessage = Replace(delimitedMessage, "Address", "###")
+    delimitedMessage = Replace(delimitedMessage, "Address 1:", "###")
     delimitedMessage = Replace(delimitedMessage, "City:", "###")
     delimitedMessage = Replace(delimitedMessage, "State:", "###")
     delimitedMessage = Replace(delimitedMessage, "ZIP Code:", "###")
@@ -183,19 +183,29 @@ Private Sub CreateOrUpdateContact(body As String)
     delimitedMessage = Replace(delimitedMessage, "Total", "###")
     messageArray = Split(delimitedMessage, "###")
         
-    ' clean up values and remove unwanted characters
+'    ' clean up values and remove unwanted characters
+'    Dim i As Integer
+'    For i = 1 To UBound(messageArray)
+'        ' remove the " mark from the hyperlink
+'        If i = 3 Or i = 4 Or i = 8 Then
+'            splitArray = Split(messageArray(i), Chr(34))
+'            messageArray(i) = splitArray(UBound(splitArray))
+'        End If
+'
+'        ' remove the newline character and replace it with an empty string
+'        messageArray(i) = Replace(messageArray(i), vbNewLine, "")
+'    Next
+    
+    ' replace unwanted characters with an empty string
     Dim i As Integer
     For i = 1 To UBound(messageArray)
-        ' remove the " mark from the hyperlink
-        If i = 3 Or i = 4 Or i = 8 Then
-            splitArray = Split(messageArray(i), Chr(34))
-            messageArray(i) = splitArray(UBound(splitArray))
-        End If
-        
-        ' remove the newline character and replace it with an empty string
         messageArray(i) = Replace(messageArray(i), vbNewLine, "")
+        messageArray(i) = Replace(messageArray(i), vbTab, "")
     Next
         
+'    Debug.Print "Name: " & messageArray(1) & " " & messageArray(2) & vbNewLine & _
+'        "E-mail: " & messageArray(3)
+    
     ' search for contact after collecting the relevant data
     Set Contact = FindContact(messageArray(1), messageArray(2), messageArray(3))
         
@@ -224,7 +234,9 @@ Private Sub CreateOrUpdateContact(body As String)
             "Phone: " & Contact.BusinessTelephoneNumber & vbNewLine & _
             "Company: " & Contact.CompanyName & vbNewLine & _
             "Job Title: " & Contact.JobTitle & vbNewLine & _
-            "Address: " & Contact.BusinessAddress & vbNewLine & Contact.BusinessAddressCountry & vbNewLine & _
+            "Address: " & Contact.BusinessAddress & vbNewLine & _
+            Contact.BusinessAddressCountry & vbNewLine & _
+            "Notes: " & Contact.body & vbNewLine & _
             vbNewLine & "Update with new information?"
             
         If MsgBox(prompt, vbQuestion Or vbYesNo) = vbNo Then
@@ -246,15 +258,13 @@ Private Sub CreateOrUpdateContact(body As String)
         Contact.BusinessAddressPostalCode = messageArray(11)
         Contact.BusinessAddressCountry = messageArray(12)
         
-        Debug.Print "Notes: " & Contact.body
-        
         If Contact.body = "" Then
             Contact.body = Year(Date) & " Regional Conference" & vbNewLine & _
                 "Position: " & messageArray(13)
         End If
         
         ' save contact data
-        Contact.Save
+        ' Contact.Save
     End If
     
     ' clean up
@@ -270,6 +280,8 @@ Function FindContact(firstName As String, lastName As String, email As String)
     
     filter = "[FullName] = " & Chr(34) & firstName & " " & lastName & Chr(34) & _
         " And [E-mail] = " & Chr(34) & email & Chr(34)
+    
+    ' Debug.Print "Filter: " & filter
     
     Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
     Set Contact = ContactsFolder.Items.Find(filter)
