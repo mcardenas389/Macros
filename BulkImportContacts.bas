@@ -81,7 +81,7 @@ Private Sub ImportToContacts(FoundFolder As Folder)
     ' limit how the user inputs number of days
     Dim days As Integer
     days = InputBox("Number of days back: ")
-    filter = "[Received] >= " & Chr(34) & dt - days & Chr(34) ' & " And "
+    filter = "[Received] >= " & Chr(34) & dt - days & Chr(34) ' & " And " & _
         ' "[E-mail] = " & constantContact & Chr(34) & " Or " & _
         ' "[E-mail] = " & paypal
     Set MyItems = FoundFolder.Items.Restrict(filter)
@@ -94,7 +94,7 @@ Private Sub ImportToContacts(FoundFolder As Folder)
             Mail.UnRead = False
         End If
         
-        ' If Mail.SenderEmailAddress Is sender Then
+        ' If Mail.SenderEmailAddress Is constantContact Then
             ' Call CreateOrUpdateContact(Mail.body)
         ' ElseIf Mail.SenderEmailAddress Is paypal Then
             Call UpdatePayment(Mail.body)
@@ -423,13 +423,15 @@ Sub DateTest()
     Dim Mail As Outlook.MailItem
     
     dt = DateTime.Date
-    filter = "[Received] >= " & Chr(34) & dt - 765 & Chr(34)
+    filter = "[Received] >= " & Chr(34) & dt - 60 & Chr(34)
     
     Set NS = Session.Application.GetNamespace("MAPI")
     Set Folder = NS.GetDefaultFolder(olFolderInbox)
     Set MailItems = Folder.Items.Restrict(filter)
     
-    For Each Mail In MailItems
-        Debug.Print Mail.sender & " " & Mail.ReceivedTime
-    Next
+    Debug.Print dt
+    
+    'For Each Mail In MailItems
+    '    Debug.Print Mail.sender & " " & Mail.ReceivedTime
+    'Next
 End Sub
