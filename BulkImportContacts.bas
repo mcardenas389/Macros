@@ -1,4 +1,5 @@
 Attribute VB_Name = "Module1"
+' used for ComboBox1 in UserForm1
 Public choice As String
 
 ' imports contacts from emails from a folder
@@ -193,6 +194,7 @@ Private Sub CreateOrUpdateContact(body As String)
     Dim splitArray() As String
     Dim delimitedMessage As String
     Dim prompt As String
+    Dim ContactItems As Outlook.Items
     Dim Contact As Outlook.ContactItem
     
     On Error GoTo ErrorHandler
@@ -236,14 +238,17 @@ Private Sub CreateOrUpdateContact(body As String)
 '        messageArray(i) = Replace(messageArray(i), vbTab, "")
 '    Next
     
-    ' search for contact after collecting the relevant data
-    Set Contact = FindContact(messageArray(1), messageArray(2), messageArray(3))
-        
-    ' if the contact is not found, then create a new contact without prompting the user
+    ' search for contacts after collecting the relevant data
+    Set ContactItems = FindContacts(messageArray(1), messageArray(2))
+    
+    ' prompt the user if there are multiple results from the query
+    If ContactItems.Count > 1 Then
+        msg = "There are " & ContactItems.Count & " matches for " & messageArray(1) & " " & messageArray(2)
+        MsgBox msg, , "Multiple Results!"
+    End If
+    
     ' if the contact is found, then prompt the user before updating it
-    If Contact Is Nothing Then
-        Set Contact = Application.CreateItem(olContactItem)
-    Else
+    For Each Contact In ContactItems
         ' build prompt
         ' new contact info
         prompt = "Contact exists!" & vbNewLine & vbNewLine & "New information:" & vbNewLine & _
@@ -267,42 +272,18 @@ Private Sub CreateOrUpdateContact(body As String)
             Contact.BusinessAddressCountry & vbNewLine & _
             "Notes: " & Contact.body & vbNewLine & _
             vbNewLine & "Update with new information?"
-            
+                
         If MsgBox(prompt, vbQuestion Or vbYesNo) = vbNo Then
             Set Contact = Nothing
         End If
-    End If
+        
+        ' create or update contact if contact object has been set
+        Call SaveContact(Contact, messageArray())
+    Next
     
-    ' create or update contact if contact object has been set
-    If Not Contact Is Nothing Then
-        With Contact
-            .firstName = messageArray(1)
-            .lastName = messageArray(2)
-            .Email1Address = messageArray(3)
-            .BusinessTelephoneNumber = messageArray(4)
-            .CompanyName = messageArray(6)
-            .JobTitle = messageArray(7)
-            .BusinessAddressStreet = messageArray(8)
-            .BusinessAddressCity = messageArray(9)
-            .BusinessAddressState = StateAbbreviation(messageArray(10))
-            .BusinessAddressPostalCode = messageArray(11)
-            .BusinessAddressCountry = messageArray(12)
-        End With
-        
-        If Contact.body = "" Then
-            Contact.body = "Position: " & messageArray(13)
-        Else
-            prompt = "Append notes?" & vbNewLine & vbNewLine & "Notes:" & vbNewLine & _
-                Contact.body & vbNewLine & vbNewLine & "Append with:" & vbNewLine & _
-                "Position: " & messageArray(13)
-            
-            If MsgBox(prompt, vbQuestion Or vbYesNo) = vbYes Then
-                Contact.body = "Position: " & messageArray(13)
-            End If
-        End If
-        
-        ' save contact data
-        ' Contact.Save
+    ' if no contacts are found, then create a new contact without prompting the user
+    If ContactItems.Count = 0 Then
+        Call SaveContact(Application.CreateItem(olContactItem), messageArray())
     End If
     
 ErrorHandler:
@@ -315,7 +296,33 @@ ErrorHandler:
     
     ' clean up
     Set Contact = Nothing
+    Set ContactItems = Nothing
 End Sub
+
+' using a given firstName, lastName, and/or e-mail searches and returns a collection of Contacts
+Private Function FindContacts(firstName As String, lastName As String, Optional email As String)
+    Dim filter As String
+    Dim ContactsFolder As Folder
+    Dim ContactItems As Outlook.Items
+    
+    filter = "[FullName] = " & Chr(34) & firstName & " " & lastName & Chr(34)
+    
+    If email <> "" Then
+        filter = filter & " And [E-mail] = " & Chr(34) & email & Chr(34)
+    End If
+    
+    ' Debug.Print "Filter: " & filter
+    
+    Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
+    Set ContactItems = ContactsFolder.Items.Restrict(filter)
+    
+    ' return value
+    Set FindContacts = ContactItems
+    
+    ' clean up
+    Set ConctacsFolder = Nothing
+    Set ConactItems = Nothing
+End Function
 
 ' searches for a contact using a given first name, last name, and email
 ' returns contact object if it is found and Nothing if it is not found
@@ -342,6 +349,40 @@ Private Function FindContact(firstName As String, lastName As String, Optional e
     Set ConctacsFolder = Nothing
     Set Conact = Nothing
 End Function
+
+Private Sub SaveContact(Contact As Outlook.ContactItem, messageArray() As String)
+    ' check to see if an empty object was passed through
+    If Not Contact Is Nothing Then
+        With Contact
+            .firstName = messageArray(1)
+            .lastName = messageArray(2)
+            .Email1Address = messageArray(3)
+            .BusinessTelephoneNumber = messageArray(4)
+            .CompanyName = messageArray(6)
+            .JobTitle = messageArray(7)
+            .BusinessAddressStreet = messageArray(8)
+            .BusinessAddressCity = messageArray(9)
+            .BusinessAddressState = StateAbbreviation(messageArray(10))
+            .BusinessAddressPostalCode = messageArray(11)
+            .BusinessAddressCountry = messageArray(12)
+        End With
+        
+        If Contact.body = "" Then
+            Contact.body = "Position: " & messageArray(13)
+        Else
+            prompt = "Append notes?" & vbNewLine & vbNewLine & "Notes:" & vbNewLine & _
+                Contact.body & vbNewLine & vbNewLine & "Append with:" & vbNewLine & _
+                "Position: " & messageArray(13)
+            
+            If MsgBox(prompt, vbQuestion Or vbYesNo) = vbYes Then
+                Contact.body = vbNewLine & "Position: " & messageArray(13)
+            End If
+        End If
+        
+        ' save contact data in default contacts folder
+        Contact.Save
+    End If
+End Sub
 
 ' returns the state abbreviation
 ' returns the original string if it is not found
