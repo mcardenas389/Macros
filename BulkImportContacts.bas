@@ -57,12 +57,10 @@ End Function
 ' calls CreateOrUpdateContact() to create new contacts
 Private Sub ImportToContacts(FoundFolder As Folder)
     Dim Mail As Outlook.MailItem
-    Dim ContactsFolder As Folder
     Dim MyItems As Outlook.Items
     Dim dt As Date
     Dim constantContact As String
     Dim paypal As String
-    Dim body As String
     Dim filter As String
     Dim counter As Integer
     
@@ -95,7 +93,6 @@ Private Sub ImportToContacts(FoundFolder As Folder)
     
     filter = "[Received] >= " & Chr(34) & dt - days & Chr(34)
     
-    Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
     Set MyItems = FoundFolder.Items.Restrict(filter)
     
     For Each Mail In MyItems
@@ -104,11 +101,11 @@ Private Sub ImportToContacts(FoundFolder As Folder)
             Mail.UnRead = False
         End If
         
-        'If Mail.SenderEmailAddress Like constantContact Then
+        ' If Mail.SenderEmailAddress Like constantContact Then
             Call CreateOrUpdateContact(Mail.body)
         ' ElseIf Mail.SenderEmailAddress Like paypal Then
         '    Call UpdatePayment(Mail.body)
-        'End If
+        ' End If
         
         ' for debugging
         ' Mail.SaveAs "C:\Users\Hunter\Documents\out" & counter & ".txt", olTXT
@@ -219,6 +216,7 @@ Private Sub CreateOrUpdateContact(body As String)
     messageArray = Split(delimitedMessage, "###")
         
     ' clean up values and remove unwanted characters
+    ' used on shared PC
     Dim i As Integer
     For i = 1 To UBound(messageArray)
         ' remove the " mark from the hyperlink
@@ -232,6 +230,7 @@ Private Sub CreateOrUpdateContact(body As String)
     Next
     
 '    ' replace unwanted characters with an empty string
+'    ' used on end user's PC
 '    Dim i As Integer
 '    For i = 1 To UBound(messageArray)
 '        messageArray(i) = Replace(messageArray(i), vbNewLine, "")
@@ -300,18 +299,12 @@ ErrorHandler:
 End Sub
 
 ' using a given firstName, lastName, and/or e-mail searches and returns a collection of Contacts
-Private Function FindContacts(firstName As String, lastName As String, Optional email As String)
+Private Function FindContacts(firstName As String, lastName As String)
     Dim filter As String
     Dim ContactsFolder As Folder
     Dim ContactItems As Outlook.Items
     
     filter = "[FullName] = " & Chr(34) & firstName & " " & lastName & Chr(34)
-    
-    If email <> "" Then
-        filter = filter & " And [E-mail] = " & Chr(34) & email & Chr(34)
-    End If
-    
-    ' Debug.Print "Filter: " & filter
     
     Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
     Set ContactItems = ContactsFolder.Items.Restrict(filter)
@@ -336,8 +329,6 @@ Private Function FindContact(firstName As String, lastName As String, Optional e
     If email <> "" Then
         filter = filter & " And [E-mail] = " & Chr(34) & email & Chr(34)
     End If
-    
-    ' Debug.Print "Filter: " & filter
     
     Set ContactsFolder = Session.GetDefaultFolder(olFolderContacts)
     Set Contact = ContactsFolder.Items.Find(filter)
@@ -365,6 +356,7 @@ Private Sub SaveContact(Contact As Outlook.ContactItem, messageArray() As String
             .BusinessAddressState = StateAbbreviation(messageArray(10))
             .BusinessAddressPostalCode = messageArray(11)
             .BusinessAddressCountry = messageArray(12)
+            .Categories = "Correspondence"
         End With
         
         If Contact.body = "" Then
